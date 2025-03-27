@@ -1,1 +1,1 @@
-# student-admin-mangment
+# student-managment
