@@ -54,7 +54,7 @@ const AdminRegister = () => {
 
             if (response.data.status === 'success') {
                 // Redirect to login with success message
-                navigate('api/admin/login', {
+                navigate('/api/admin/login', {
                     state: { message: 'Registration successful! Please login.' }
                 });
             }
