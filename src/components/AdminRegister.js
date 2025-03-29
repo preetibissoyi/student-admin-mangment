@@ -44,7 +44,7 @@ const AdminRegister = () => {
 
         try {
             const response = await axios.post(
-                `${process.env.REACT_APP_API_URL}/admin/register`,
+                `${process.env.REACT_APP_API_URL}/api/admin/register`,
                 {
                     name: formData.name,
                     email: formData.email,
@@ -54,7 +54,7 @@ const AdminRegister = () => {
 
             if (response.data.status === 'success') {
                 // Redirect to login with success message
-                navigate('/admin/login', {
+                navigate('api/admin/login', {
                     state: { message: 'Registration successful! Please login.' }
                 });
             }

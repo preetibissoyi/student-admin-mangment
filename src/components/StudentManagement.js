@@ -122,7 +122,7 @@ const StudentManagement = () => {
         return
       }
 
-      const response = await axios.get(`${process.env.REACT_APP_API_URL}/students`, {
+      const response = await axios.get(`${process.env.REACT_APP_API_URL}/api/students/`, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",

@@ -2,7 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material';
 import Login from './components/Login';
-import Navigation from './components/Navigation';
+// import Navigation from './components/Navigation';
 import ResultManagement from './components/ResultManagement';
 import BatchResults from './components/BatchResults';
 import StudentResults from './components/StudentResults';

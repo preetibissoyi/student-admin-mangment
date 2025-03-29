@@ -1,169 +1,135 @@
-import React, { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import {
-    AppBar,
-    Box,
-    CssBaseline,
-    Drawer,
-    IconButton,
-    List,
-    ListItem,
-    ListItemIcon,
-    ListItemText,
-    Toolbar,
-    Typography,
-    useTheme,
-    useMediaQuery,
-    Divider
-} from '@mui/material';
-import {
-    Menu as MenuIcon,
-    Assessment as AssessmentIcon,
-    People as PeopleIcon,
-    ExitToApp as LogoutIcon,
-    Dashboard as DashboardIcon,
-    Card as CardIcon
-} from '@mui/icons-material';
+// import type React from "react";
+// import { useState, useEffect } from "react";
+// import { usePathname, useRouter } from "next/navigation";
+// import { LayoutDashboard, Users, FileBarChart, LogOut, ChevronDown, GraduationCap } from "lucide-react";
 
-const drawerWidth = 240;
+// import { cn } from "@/lib/utils";
+// import {
+//   Sidebar,
+//   SidebarContent,
+//   SidebarFooter,
+//   SidebarHeader,
+//   SidebarMenu,
+//   SidebarMenuItem,
+//   SidebarMenuButton,
+//   SidebarProvider,
+//   SidebarTrigger,
+//   SidebarInset,
+//   SidebarMenuSub,
+//   SidebarMenuSubButton,
+//   SidebarMenuSubItem,
+// } from "@/components/ui/sidebar";
+// import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+// import { Badge } from "@/components/ui/badge";
+// import { Separator } from "@/components/ui/separator";
+// import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
-const Navigation = ({ children }) => {
-    const navigate = useNavigate();
-    const location = useLocation();
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-    const [mobileOpen, setMobileOpen] = useState(false);
+// const Navigation = ({ children }: { children: React.ReactNode }) =>
+//   {
+//   const router = useRouter();
+//   const pathname = usePathname();
+//   const [adminData, setAdminData] = useState<any>({});
+//   const [isAdmin, setIsAdmin] = useState(false);
+//   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 
-    const adminData = JSON.parse(localStorage.getItem('adminData') || '{}');
-    const isAdmin = !!adminData.role;
+//   useEffect(() => {
+//     const storedAdminData = localStorage.getItem("adminData");
+//     if (storedAdminData) {
+//       const parsedData = JSON.parse(storedAdminData);
+//       setAdminData(parsedData);
+//       setIsAdmin(!!parsedData.role);
+//     }
+//   }, []);
 
-    const handleDrawerToggle = () => {
-        setMobileOpen(!mobileOpen);
-    };
+//   const handleLogout = () => {
+//     localStorage.removeItem("adminToken");
+//     localStorage.removeItem("studentToken");
+//     localStorage.removeItem("adminData");
+//     localStorage.removeItem("studentData");
+//     router.push("/login");
+//   };
 
-    const handleLogout = () => {
-        localStorage.removeItem('adminToken');
-        localStorage.removeItem('studentToken');
-        localStorage.removeItem('adminData');
-        localStorage.removeItem('studentData');
-        navigate('/login');
-    };
+//   const toggleSection = (title: string) => {
+//     setOpenSections((prev) => ({
+//       ...prev,
+//       [title]: !prev[title],
+//     }));
+//   };
 
-    const menuItems = isAdmin ? [
-        { text: 'Dashboard', icon: <DashboardIcon />, path: '/admin/dashboard' },
-        { text: 'Manage Students', icon: <PeopleIcon />, path: '/admin/students' },
-        { text: 'Manage Results', icon: <AssessmentIcon />, path: '/admin/results' },
-        { text: 'Batch Results', icon: <PeopleIcon />, path: '/admin/batch-results' },
-    ] : [
-        { text: 'My Results', icon: <AssessmentIcon />, path: '/student/results' }
-    ];
+//   const menuItems = isAdmin
+//     ? [
+//         { text: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" />, path: "/admin/dashboard", items: [] },
+//         {
+//           text: "Manage Students",
+//           icon: <Users className="h-4 w-4" />, path: "/admin/students",
+//           items: [
+//             { text: "View All", path: "/admin/students" },
+//             { text: "Add New", path: "/admin/students/new" },
+//             { text: "Import", path: "/admin/students/import" },
+//           ],
+//         },
+//         { text: "Manage Results", icon: <FileBarChart className="h-4 w-4" />, path: "/admin/results", items: [] },
+//         { text: "Batch Results", icon: <GraduationCap className="h-4 w-4" />, path: "/admin/batch-results", items: [] },
+//       ]
+//     : [
+//         { text: "My Results", icon: <FileBarChart className="h-4 w-4" />, path: "/student/results", items: [] },
+//       ];
 
-    const drawer = (
-        <div>
-            <Toolbar>
-                <Typography variant="h6" noWrap component="div">
-                    {isAdmin ? 'Admin Panel' : 'Student Portal'}
-                </Typography>
-            </Toolbar>
-            <Divider />
-            <List>
-                {menuItems.map((item) => (
-                    <ListItem
-                        button
-                        key={item.text}
-                        onClick={() => {
-                            navigate(item.path);
-                            if (isMobile) {
-                                setMobileOpen(false);
-                            }
-                        }}
-                        selected={location.pathname === item.path}
-                    >
-                        <ListItemIcon>{item.icon}</ListItemIcon>
-                        <ListItemText primary={item.text} />
-                    </ListItem>
-                ))}
-            </List>
-            <Divider />
-            <List>
-                <ListItem button onClick={handleLogout}>
-                    <ListItemIcon><LogoutIcon /></ListItemIcon>
-                    <ListItemText primary="Logout" />
-                </ListItem>
-            </List>
-        </div>
-    );
+//   return (
+//     <SidebarProvider>
+//       <div className="flex min-h-screen">
+//         <Sidebar className="border-r">
+//           <SidebarHeader className="border-b">
+//             <div className="flex items-center gap-2 px-2 py-4">
+//               <Avatar className="h-8 w-8 border-2 border-background">
+//                 <AvatarFallback className="bg-primary text-primary-foreground">{isAdmin ? "A" : "S"}</AvatarFallback>
+//               </Avatar>
+//               <div className="flex flex-col">
+//                 <span className="text-sm font-semibold">{isAdmin ? "Admin Panel" : "Student Portal"}</span>
+//                 <span className="text-xs text-muted-foreground">{adminData.name || "User"}</span>
+//               </div>
+//             </div>
+//           </SidebarHeader>
 
-    return (
-        <Box sx={{ display: 'flex' }}>
-            <CssBaseline />
-            <AppBar
-                position="fixed"
-                sx={{
-                    width: { sm: `calc(100% - ${drawerWidth}px)` },
-                    ml: { sm: `${drawerWidth}px` },
-                }}
-            >
-                <Toolbar>
-                    <IconButton
-                        color="inherit"
-                        aria-label="open drawer"
-                        edge="start"
-                        onClick={handleDrawerToggle}
-                        sx={{ mr: 2, display: { sm: 'none' } }}
-                    >
-                        <MenuIcon />
-                    </IconButton>
-                    <Typography variant="h6" noWrap component="div">
-                        {isAdmin ? 'Admin Dashboard' : 'Student Portal'}
-                    </Typography>
-                </Toolbar>
-            </AppBar>
-            <Box
-                component="nav"
-                sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
-            >
-                {isMobile ? (
-                    <Drawer
-                        variant="temporary"
-                        open={mobileOpen}
-                        onClose={handleDrawerToggle}
-                        ModalProps={{
-                            keepMounted: true,
-                        }}
-                        sx={{
-                            display: { xs: 'block', sm: 'none' },
-                            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
-                        }}
-                    >
-                        {drawer}
-                    </Drawer>
-                ) : (
-                    <Drawer
-                        variant="permanent"
-                        sx={{
-                            display: { xs: 'none', sm: 'block' },
-                            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
-                        }}
-                        open
-                    >
-                        {drawer}
-                    </Drawer>
-                )}
-            </Box>
-            <Box
-                component="main"
-                sx={{
-                    flexGrow: 1,
-                    p: 3,
-                    width: { sm: `calc(100% - ${drawerWidth}px)` },
-                    mt: 8
-                }}
-            >
-                {children}
-            </Box>
-        </Box>
-    );
-};
+//           <SidebarContent>
+//             <SidebarMenu>
+//               {menuItems.map((item) => (
+//                 <SidebarMenuItem key={item.text}>
+//                   <SidebarMenuButton asChild>
+//                     <button onClick={() => router.push(item.path)}>
+//                       {item.icon}
+//                       <span>{item.text}</span>
+//                     </button>
+//                   </SidebarMenuButton>
+//                 </SidebarMenuItem>
+//               ))}
+//             </SidebarMenu>
+//           </SidebarContent>
 
-export default Navigation; 
+//           <SidebarFooter>
+//             <Separator className="my-2" />
+//             <SidebarMenu>
+//               <SidebarMenuItem>
+//                 <SidebarMenuButton onClick={handleLogout} className="text-destructive hover:bg-destructive/10 hover:text-destructive">
+//                   <LogOut className="h-4 w-4" />
+//                   <span>Logout</span>
+//                 </SidebarMenuButton>
+//               </SidebarMenuItem>
+//             </SidebarMenu>
+//           </SidebarFooter>
+//         </Sidebar>
+
+//         <SidebarInset>
+//           <header className="sticky top-0 z-10 flex h-14 items-center gap-4 border-b bg-background px-4 sm:px-6">
+//             <SidebarTrigger />
+//             <h1 className="text-lg font-semibold">{isAdmin ? "Admin Dashboard" : "Student Portal"}</h1>
+//           </header>
+
+//           <main className="flex-1 p-4 sm:p-6">{children}</main>
+//         </SidebarInset>
+//       </div>
+//     </SidebarProvider>
+//   );
+// };
+
+// export { Navigation };
