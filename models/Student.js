@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
-const validator = require('validator');
 
 const studentSchema = new mongoose.Schema({
     studentName: {
@@ -12,12 +11,15 @@ const studentSchema = new mongoose.Schema({
         type: String,
         required: [true, 'Email is required'],
         unique: true,
-        validate: [validator.isEmail, 'Please provide a valid email']
+        trim: true,
+        lowercase: true,
+        match: [/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
     },
     password: {
         type: String,
         required: [true, 'Password is required'],
-        minlength: 6
+        minlength: [6, 'Password must be at least 6 characters long'],
+        select: false
     },
     collegeRollNumber: {
         type: String,
@@ -25,14 +27,10 @@ const studentSchema = new mongoose.Schema({
         unique: true,
         trim: true
     },
-    programType: {
+    examinationRollNumber: {
         type: String,
-        required: [true, 'Program type is required'],
-        enum: ['UG', 'PG']
-    },
-    stream: {
-        type: String,
-        required: [true, 'Stream is required'],
+        required: [true, 'Examination roll number is required'],
+        unique: true,
         trim: true
     },
     batch: {
@@ -40,79 +38,83 @@ const studentSchema = new mongoose.Schema({
         required: [true, 'Batch is required'],
         trim: true
     },
-    examinationRollNumber: {
+    stream: {
         type: String,
-        required: [true, 'Examination roll number is required'],
-        unique: true,
-        trim: true,
-        validate: {
-            validator: function(v) {
-                return v && v.length > 0;
-            },
-            message: 'Examination roll number cannot be empty'
-        }
+        required: [true, 'Stream is required'],
+        trim: true
     },
     examCode: {
         type: String,
-        unique: true,
         trim: true
-    },
-    profilePhoto: {
-        type: String,
-        default: null
     },
     createdBy: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Admin',
-        required: true
+        ref: 'User',
+        required: false
     }
-}, { timestamps: true });
+}, {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
+});
 
-// Function to generate random alphanumeric code
-const generateExamCode = () => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let code = '';
-    for (let i = 0; i < 6; i++) {
-        code += chars.charAt(Math.floor(Math.random() * chars.length));
+// Virtual field for examRollNumber
+studentSchema.virtual('examRollNumber').get(function() {
+    return this.examinationRollNumber;
+});
+
+// Create indexes
+studentSchema.index({ email: 1 }, { unique: true });
+studentSchema.index({ collegeRollNumber: 1 }, { unique: true });
+studentSchema.index({ examinationRollNumber: 1 }, { unique: true });
+
+// Generate 6-digit exam code
+const generateExamCode = async () => {
+    let code;
+    let isUnique = false;
+    let attempts = 0;
+    const maxAttempts = 10;
+
+    while (!isUnique && attempts < maxAttempts) {
+        // Generate a 6-digit number
+        code = Math.floor(100000 + Math.random() * 900000).toString();
+        
+        // Check if code already exists
+        const existingStudent = await mongoose.model('Student').findOne({ examCode: code });
+        if (!existingStudent) {
+            isUnique = true;
+        }
+        attempts++;
     }
+
+    if (!isUnique) {
+        throw new Error('Failed to generate unique exam code');
+    }
+
     return code;
 };
 
 // Hash password before saving
-studentSchema.pre('save', async function (next) {
+studentSchema.pre('save', async function(next) {
     try {
-        // Hash password if it's modified
+        // Generate exam code only for new students
+        if (this.isNew && !this.examCode) {
+            this.examCode = await generateExamCode();
+        }
+
+        // Hash password only if modified
         if (this.isModified('password')) {
             this.password = await bcrypt.hash(this.password, 12);
         }
-
-        // Generate exam code if it's a new student
-        if (this.isNew) {
-            let isUnique = false;
-            let examCode;
-            
-            // Keep trying until we get a unique code
-            while (!isUnique) {
-                examCode = generateExamCode();
-                const existingStudent = await this.constructor.findOne({ examCode });
-                if (!existingStudent) {
-                    isUnique = true;
-                }
-            }
-            
-            this.examCode = examCode;
-        }
-
         next();
     } catch (error) {
         next(error);
     }
 });
 
-// Add index for faster queries
-studentSchema.index({ collegeRollNumber: 1 }, { unique: true });
-studentSchema.index({ examinationRollNumber: 1 }, { unique: true });
-studentSchema.index({ email: 1 }, { unique: true });
+// Compare password method
+studentSchema.methods.matchPassword = async function(enteredPassword) {
+    return await bcrypt.compare(enteredPassword, this.password);
+};
 
-const Student = mongoose.model('Student', studentSchema);
-module.exports = Student;
+module.exports = mongoose.model('Student', studentSchema);

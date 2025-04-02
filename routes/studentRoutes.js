@@ -1,368 +1,317 @@
 const express = require('express');
-const jwt = require('jsonwebtoken');
-const Student = require('../models/Student');
-const Admin = require('../models/Admin');
-const upload = require('../middleware/upload');
-
 const router = express.Router();
+const Student = require('../models/Student');
 
-// Middleware to protect routes
-const protect = async (req, res, next) => {
+// Register a new student
+router.post('/register', async (req, res) => {
     try {
-        const token = req.headers.authorization?.split(' ')[1];
-        if (!token) {
-            return res.status(401).json({ message: 'Not authorized, no token' });
+        // Handle both examRollNumber and examinationRollNumber
+        if (req.body.examRollNumber && !req.body.examinationRollNumber) {
+            req.body.examinationRollNumber = req.body.examRollNumber;
         }
 
-        // Verify token
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-jwt-key-change-this-in-production');
-        const admin = await Admin.findById(decoded.id);
+        // Validate required fields
+        const requiredFields = [
+            'studentName',
+            'email',
+            'password',
+            'collegeRollNumber',
+            'examinationRollNumber',
+            'batch',
+            'stream'
+        ];
 
-        if (!admin) {
-            return res.status(401).json({ message: 'Not authorized, invalid token' });
-        }
-
-        req.admin = admin;
-        next();
-    } catch (error) {
-        res.status(401).json({ message: 'Not authorized, token failed' });
-    }
-};
-
-// Helper function to generate unique examination roll number
-const generateUniqueExamRollNumber = async () => {
-    let isUnique = false;
-    let examinationRollNumber;
-    
-    while (!isUnique) {
-        // Generate a random 6-digit number
-        const randomNum = Math.floor(100000 + Math.random() * 900000);
-        examinationRollNumber = `EX-${randomNum}`;
-        
-        // Check if this roll number already exists
-        const existingStudent = await Student.findOne({ examinationRollNumber });
-        if (!existingStudent) {
-            isUnique = true;
-        }
-    }
-    
-    return examinationRollNumber;
-};
-
-// ✅ Student Registration Route (Fixed)
-router.post('/', protect, upload.single('profilePhoto'), async (req, res) => {
-    try {
-        let {
-            studentName,
-            collegeRollNumber,
-            programType,
-            stream,
-            batch,
-            email,
-            password,
-        } = req.body;
-
-        // Log the raw request body
-        console.log('Raw request body:', req.body);
-        console.log('Raw request files:', req.files);
-        console.log('Raw request file:', req.file);
-
-        // Trim all string inputs
-        studentName = studentName?.trim();
-        collegeRollNumber = collegeRollNumber?.trim();
-        stream = stream?.trim();
-        batch = batch?.trim();
-        email = email?.trim().toLowerCase();
-
-        console.log('Processed student data:', {
-            studentName,
-            collegeRollNumber,
-            programType,
-            stream,
-            batch,
-            email,
-            hasPassword: !!password,
-            hasFile: !!req.file
-        });
-
-        // ✅ Validate required fields
-        const missingFields = [];
-        if (!studentName) missingFields.push('studentName');
-        if (!collegeRollNumber) missingFields.push('collegeRollNumber');
-        if (!programType) missingFields.push('programType');
-        if (!stream) missingFields.push('stream');
-        if (!batch) missingFields.push('batch');
-        if (!email) missingFields.push('email');
-        if (!password) missingFields.push('password');
-
+        const missingFields = requiredFields.filter(field => !req.body[field]);
         if (missingFields.length > 0) {
             return res.status(400).json({
-                status: 'fail',
+                success: false,
                 message: `Missing required fields: ${missingFields.join(', ')}`
             });
         }
 
-        // ✅ Ensure program type is valid
-        if (!['UG', 'PG'].includes(programType)) {
+        // Validate email format
+        if (!req.body.email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
             return res.status(400).json({
-                status: 'fail',
-                message: 'Program type must be either UG or PG'
+                success: false,
+                message: 'Please provide a valid email address'
             });
         }
 
-        // ✅ Generate unique examination roll number
-        const examinationRollNumber = await generateUniqueExamRollNumber();
+        // Validate password length
+        if (req.body.password.length < 6) {
+            return res.status(400).json({
+                success: false,
+                message: 'Password must be at least 6 characters long'
+            });
+        }
 
-        // ✅ Check if email already exists
-        const existingEmail = await Student.findOne({ email });
+        // Check for existing student with specific fields
+        const existingEmail = await Student.findOne({ email: req.body.email });
         if (existingEmail) {
             return res.status(400).json({
-                status: 'fail',
-                message: 'Email already registered'
+                success: false,
+                message: 'A student with this email already exists'
             });
         }
 
-        // ✅ Check if college roll number already exists
-        const existingCollegeRoll = await Student.findOne({ collegeRollNumber });
+        const existingCollegeRoll = await Student.findOne({ collegeRollNumber: req.body.collegeRollNumber });
         if (existingCollegeRoll) {
             return res.status(400).json({
-                status: 'fail',
-                message: 'College roll number already exists'
+                success: false,
+                message: 'A student with this college roll number already exists'
             });
         }
 
-        // ✅ Handle Profile Photo Upload
-        const profilePhoto = req.file ? `/uploads/students/${req.file.filename}` : null;
+        const existingExamRoll = await Student.findOne({ examinationRollNumber: req.body.examinationRollNumber });
+        if (existingExamRoll) {
+            return res.status(400).json({
+                success: false,
+                message: 'A student with this exam roll number already exists'
+            });
+        }
 
-        // ✅ Create Student Record
-        const student = await Student.create({
-            studentName,
-            email,
-            password,
-            collegeRollNumber,
-            programType,
-            stream,
-            batch,
-            examinationRollNumber,
-            profilePhoto,
-            createdBy: req.admin._id
+        // Create new student
+        const student = new Student({
+            studentName: req.body.studentName,
+            email: req.body.email,
+            password: req.body.password,
+            rollNumber: req.body.rollNumber || null,
+            collegeRollNumber: req.body.collegeRollNumber,
+            examinationRollNumber: req.body.examinationRollNumber,
+            batch: req.body.batch,
+            stream: req.body.stream
         });
+
+        await student.save();
 
         res.status(201).json({
-            status: 'success',
-            message: 'Student created successfully',
+            success: true,
+            message: 'Student registered successfully',
             data: {
-                student: {
-                    id: student._id,
-                    studentName: student.studentName,
-                    email: student.email,
-                    collegeRollNumber: student.collegeRollNumber,
-                    programType: student.programType,
-                    stream: student.stream,
-                    batch: student.batch,
-                    examinationRollNumber: student.examinationRollNumber,
-                    examCode: student.examCode, 
-                    profilePhoto: student.profilePhoto,
-                    createdAt: student.createdAt
-                }
+                studentName: student.studentName,
+                email: student.email,
+                rollNumber: student.rollNumber,
+                collegeRollNumber: student.collegeRollNumber,
+                examinationRollNumber: student.examinationRollNumber,
+                examRollNumber: student.examRollNumber,
+                batch: student.batch,
+                stream: student.stream,
+                examCode: student.examCode,
+                createdAt: student.createdAt
             }
         });
     } catch (error) {
-        console.error('Error creating student:', error);
-        
-        // ✅ Handle Duplicate Key Errors
-        if (error.code === 11000) {
-            const field = Object.keys(error.keyPattern)[0];
-            let message = '';
-            switch(field) {
-                case 'email':
-                    message = 'Email already registered';
-                    break;
-                case 'collegeRollNumber':
-                    message = 'College roll number already exists';
-                    break;
-                case 'examinationRollNumber':
-                    message = 'Error generating examination roll number. Please try again.';
-                    break;
-                case 'examCode':
-                    message = 'Error generating exam code. Please try again.';
-                    break;
-                default:
-                    message = `${field} already exists`;
-            }
-            return res.status(400).json({
-                status: 'fail',
-                message
-            });
-        }
-        
-        // ✅ Handle Validation Errors
-        if (error.name === 'ValidationError') {
-            const messages = Object.values(error.errors).map(err => err.message);
-            return res.status(400).json({
-                status: 'fail',
-                message: messages.join(', ')
-            });
-        }
-        
-        res.status(400).json({
-            status: 'fail',
-            message: error.message
+        console.error('Student registration error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'An error occurred during student registration',
+            error: error.message
         });
     }
 });
+
 // Get all students
-router.get('/', protect, async (req, res) => {
+router.get('/', async (req, res) => {
     try {
-        const students = await Student.find({ createdBy: req.admin._id });
-        
-        res.status(200).json({
-            status: 'success',
-            results: students.length,
-            data: {
-                students: students.map(student => ({
-                    id: student._id,
-                    studentName: student.studentName,
-                    collegeRollNumber: student.collegeRollNumber,
-                    programType: student.programType,
-                    stream: student.stream,
-                    batch: student.batch,
-                    examinationRollNumber: student.examinationRollNumber,
-                    examCode: student.examCode,
-                    profilePhoto: student.profilePhoto
-                }))
-            }
+        const students = await Student.find({})
+            .select('-password')
+            .sort({ createdAt: -1 });
+
+        res.json({
+            success: true,
+            count: students.length,
+            data: students
         });
     } catch (error) {
-        res.status(400).json({
-            status: 'fail',
-            message: error.message
+        console.error('Error fetching students:', error);
+        res.status(500).json({
+            success: false,
+            message: 'An error occurred while fetching students',
+            error: error.message
         });
     }
 });
 
-// Get single student
-router.get('/:id', protect, async (req, res) => {
+// Get student profile
+router.get('/profile', async (req, res) => {
     try {
-        const student = await Student.findOne({
-            _id: req.params.id,
-            createdBy: req.admin._id
-        });
+        // If ID is provided, view that student's profile
+        if (req.query.id) {
+            const student = await Student.findById(req.query.id)
+                .select('-password');
 
-        if (!student) {
-            return res.status(404).json({ message: 'Student not found' });
+            if (!student) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Student not found'
+                });
+            }
+
+            return res.json({
+                success: true,
+                data: student
+            });
         }
 
-        res.status(200).json({
-            status: 'success',
-            data: {
-                student: {
-                    id: student._id,
-                    studentName: student.studentName,
-                    collegeRollNumber: student.collegeRollNumber,
-                    programType: student.programType,
-                    stream: student.stream,
-                    batch: student.batch,
-                    examinationRollNumber: student.examinationRollNumber,
-                    examCode: student.examCode,
-                    profilePhoto: student.profilePhoto
-                }
-            }
+        res.status(400).json({
+            success: false,
+            message: 'Please provide a student ID'
         });
     } catch (error) {
-        res.status(400).json({
-            status: 'fail',
-            message: error.message
+        console.error('Error fetching student profile:', error);
+        res.status(500).json({
+            success: false,
+            message: 'An error occurred while fetching student profile',
+            error: error.message
         });
     }
 });
 
-// Update student
-router.patch('/:id', protect, upload.single('profilePhoto'), async (req, res) => {
+// Get student by ID
+router.get('/:id', async (req, res) => {
     try {
-        const {
-            studentName,
-            collegeRollNumber,
-            programType,
-            stream,
-            batch,
-            examinationRollNumber,
-            examCode
-        } = req.body;
-
-        const updateData = {
-            studentName,
-            collegeRollNumber,
-            programType,
-            stream,
-            batch,
-            examinationRollNumber,
-            examCode
-        };
-
-        if (req.file) {
-            updateData.profilePhoto = `/uploads/students/${req.file.filename}`;
-        }
-
-        const student = await Student.findOneAndUpdate(
-            {
-                _id: req.params.id,
-                createdBy: req.admin._id
-            },
-            updateData,
-            { new: true, runValidators: true }
-        );
+        const student = await Student.findById(req.params.id)
+            .select('-password');
 
         if (!student) {
-            return res.status(404).json({ message: 'Student not found' });
+            return res.status(404).json({
+                success: false,
+                message: 'Student not found'
+            });
         }
 
-        res.status(200).json({
-            status: 'success',
+        res.json({
+            success: true,
+            data: student
+        });
+    } catch (error) {
+        console.error('Error fetching student:', error);
+        res.status(500).json({
+            success: false,
+            message: 'An error occurred while fetching student',
+            error: error.message
+        });
+    }
+});
+
+// Update student profile
+router.put('/:id', async (req, res) => {
+    try {
+        // Handle both examRollNumber and examinationRollNumber
+        if (req.body.examRollNumber && !req.body.examinationRollNumber) {
+            req.body.examinationRollNumber = req.body.examRollNumber;
+        }
+
+        const student = await Student.findById(req.params.id);
+
+        if (!student) {
+            return res.status(404).json({
+                success: false,
+                message: 'Student not found'
+            });
+        }
+
+        // Fields that can be updated
+        const allowedUpdates = [
+            'studentName',
+            'email',
+            'collegeRollNumber',
+            'examinationRollNumber',
+            'batch',
+            'stream'
+        ];
+
+        // Check if any of the fields to update are unique and already exist
+        if (req.body.email && req.body.email !== student.email) {
+            const existingEmail = await Student.findOne({ email: req.body.email });
+            if (existingEmail) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'A student with this email already exists'
+                });
+            }
+        }
+
+        if (req.body.collegeRollNumber && req.body.collegeRollNumber !== student.collegeRollNumber) {
+            const existingCollegeRoll = await Student.findOne({ collegeRollNumber: req.body.collegeRollNumber });
+            if (existingCollegeRoll) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'A student with this college roll number already exists'
+                });
+            }
+        }
+
+        if (req.body.examinationRollNumber && req.body.examinationRollNumber !== student.examinationRollNumber) {
+            const existingExamRoll = await Student.findOne({ examinationRollNumber: req.body.examinationRollNumber });
+            if (existingExamRoll) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'A student with this exam roll number already exists'
+                });
+            }
+        }
+
+        // Update only allowed fields
+        allowedUpdates.forEach(update => {
+            if (req.body[update] !== undefined) {
+                student[update] = req.body[update];
+            }
+        });
+
+        await student.save();
+
+        res.json({
+            success: true,
+            message: 'Student updated successfully',
             data: {
-                student: {
-                    id: student._id,
-                    studentName: student.studentName,
-                    collegeRollNumber: student.collegeRollNumber,
-                    programType: student.programType,
-                    stream: student.stream,
-                    batch: student.batch,
-                    examinationRollNumber: student.examinationRollNumber,
-                    examCode: student.examCode,
-                    profilePhoto: student.profilePhoto
-                }
+                studentName: student.studentName,
+                email: student.email,
+                collegeRollNumber: student.collegeRollNumber,
+                examinationRollNumber: student.examinationRollNumber,
+                examRollNumber: student.examRollNumber,
+                batch: student.batch,
+                stream: student.stream,
+                examCode: student.examCode,
+                updatedAt: student.updatedAt
             }
         });
     } catch (error) {
-        res.status(400).json({
-            status: 'fail',
-            message: error.message
+        console.error('Error updating student:', error);
+        res.status(500).json({
+            success: false,
+            message: 'An error occurred while updating student',
+            error: error.message
         });
     }
 });
 
 // Delete student
-router.delete('/:id', protect, async (req, res) => {
+router.delete('/:id', async (req, res) => {
     try {
-        const student = await Student.findOneAndDelete({
-            _id: req.params.id,
-            createdBy: req.admin._id
-        });
+        const student = await Student.findById(req.params.id);
 
         if (!student) {
-            return res.status(404).json({ message: 'Student not found' });
+            return res.status(404).json({
+                success: false,
+                message: 'Student not found'
+            });
         }
 
-        res.status(204).json({
-            status: 'success',
-            data: null
+        await student.remove();
+
+        res.json({
+            success: true,
+            message: 'Student deleted successfully'
         });
     } catch (error) {
-        res.status(400).json({
-            status: 'fail',
-            message: error.message
+        console.error('Error deleting student:', error);
+        res.status(500).json({
+            success: false,
+            message: 'An error occurred while deleting student',
+            error: error.message
         });
     }
 });
 
-module.exports = router; 
+module.exports = router;

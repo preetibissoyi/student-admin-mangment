@@ -4,7 +4,8 @@ const path = require('path');
 // Configure storage
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        cb(null, 'uploads/students') // Make sure this directory exists
+        const absolutePath = path.resolve(__dirname, '../uploads/students');
+        cb(null, absolutePath);
     },
     filename: function (req, file, cb) {
         // Create unique filename with timestamp
@@ -32,4 +33,21 @@ const upload = multer({
     }
 });
 
-module.exports = upload; 
+// Middleware to handle file upload
+const uploadMiddleware = (req, res, next) => {
+    upload.single('photo')(req, res, (err) => {
+        if (err) {
+            console.error('Upload error:', err);
+            return res.status(400).json({ 
+                message: err.message || 'Error uploading file',
+                error: err.code
+            });
+        }
+        if (req.file) {
+            console.log("Uploaded file details:", req.file);
+        }
+        next();
+    });
+};
+
+module.exports = uploadMiddleware;

@@ -1,124 +1,158 @@
 const express = require('express');
 const router = express.Router();
-const Student = require('../models/Student');
-const UpdateRequest = require('../models/UpdateRequest');
 const jwt = require('jsonwebtoken');
-const catchAsync = require('../utils/catchAsync');
-const AppError = require('../utils/appError');
+const Student = require('../models/Student');
+const Result = require('../models/Result');
 
-// Student Login
-router.post('/login', catchAsync(async (req, res, next) => {
-    const { email, password } = req.body;
-    if (!email || !password) {
-        return next(new AppError('Please provide email and password', 400));
-    }
-    const student = await Student.findOne({ email }).select('+password');
-    if (!student || !(await student.comparePassword(password))) {
-        return next(new AppError('Incorrect email or password', 401));
-    }
-    const token = jwt.sign(
-        { id: student._id },
-        process.env.JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRES_IN }
-    );
-    student.password = undefined;
-    res.status(200).json({
-        status: 'success',
-        token,
-        data: { student }
-    });
-}));
+// Authentication middleware
+const authenticateStudent = async (req, res, next) => {
+    try {
+        let token;
 
-// Authentication Middleware
-const protect = catchAsync(async (req, res, next) => {
-    let token;
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-        token = req.headers.authorization.split(' ')[1];
+        // Check if token exists in headers
+        if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+            token = req.headers.authorization.split(' ')[1];
+        }
+
+        if (!token) {
+            return res.status(401).json({
+                success: false,
+                message: 'Not authorized to access this route'
+            });
+        }
+
+        try {
+            // Verify token
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+            // Get student from token
+            const student = await Student.findById(decoded.id).select('-password');
+            
+            if (!student) {
+                return res.status(401).json({
+                    success: false,
+                    message: 'Student not found'
+                });
+            }
+
+            // Add student to request object
+            req.student = student;
+            next();
+        } catch (error) {
+            return res.status(401).json({
+                success: false,
+                message: 'Not authorized to access this route'
+            });
+        }
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Error in authentication',
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+        });
     }
-    if (!token) {
-        return next(new AppError('You are not logged in! Please log in to get access.', 401));
+};
+
+// Get student profile
+router.get('/profile', authenticateStudent, async (req, res) => {
+    try {
+        const student = await Student.findById(req.student._id)
+            .select('studentName examRollNumber examCode stream batch')
+            .lean();
+
+        if (!student) {
+            return res.status(404).json({
+                success: false,
+                message: 'Student not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: {
+                studentName: student.studentName,
+                examRollNumber: student.examRollNumber,
+                examCode: student.examCode,
+                stream: student.stream,
+                batch: student.batch
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching student profile:', error);
+        res.status(500).json({
+            success: false,
+            message: 'An error occurred while fetching student profile',
+            error: error.message
+        });
     }
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const currentStudent = await Student.findById(decoded.id);
-    if (!currentStudent) {
-        return next(new AppError('The student belonging to this token no longer exists.', 401));
-    }
-    req.student = currentStudent;
-    next();
 });
 
-// Get Student Profile
-router.get('/profile', protect, catchAsync(async (req, res, next) => {
-    const student = await Student.findById(req.student._id).select('-password');
-    res.status(200).json({
-        status: 'success',
-        data: { student }
-    });
-}));
+// Get student marks
+router.get('/marks', authenticateStudent, async (req, res) => {
+    try {
+        const results = await Result.find({ studentId: req.student._id })
+            .select('examCode subjectCode marks grade semester')
+            .sort({ semester: 1 })
+            .lean();
 
-// Request Profile Update
-router.post('/profile/update-request', protect, catchAsync(async (req, res, next) => {
-    const { field, newValue } = req.body;
-    const student = await Student.findById(req.student._id);
-    
-    if (!student[field]) {
-        return next(new AppError('Invalid field for update', 400));
+        if (!results.length) {
+            return res.status(404).json({
+                success: false,
+                message: 'No results found for this student'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: results
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching student marks',
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+        });
     }
+});
 
-    const updateRequest = await UpdateRequest.create({
-        student: student._id,
-        requestedBy: student._id,
-        field,
-        oldValue: student[field],
-        newValue
-    });
+// Download examination card
+router.get('/exam-card', authenticateStudent, async (req, res) => {
+    try {
+        const student = await Student.findById(req.student._id)
+            .select('studentName examRollNumber examCode programType stream batch')
+            .lean();
 
-    res.status(201).json({
-        status: 'success',
-        data: { updateRequest }
-    });
-}));
+        if (!student) {
+            return res.status(404).json({
+                success: false,
+                message: 'Student not found'
+            });
+        }
 
-// Get Update Request History
-router.get('/profile/update-history', protect, catchAsync(async (req, res, next) => {
-    const updateRequests = await UpdateRequest.find({ student: req.student._id })
-        .sort('-createdAt');
+        // Generate examination card data
+        const examCard = {
+            studentName: student.studentName,
+            examRollNumber: student.examRollNumber,
+            examCode: student.examCode,
+            programType: student.programType,
+            stream: student.stream,
+            batch: student.batch,
+            examDate: new Date().toISOString().split('T')[0], // You might want to get this from a config or database
+            examCenter: 'Your Exam Center', // This should come from configuration
+            examTime: '9:00 AM - 12:00 PM' // This should come from configuration
+        };
 
-    res.status(200).json({
-        status: 'success',
-        data: { updateRequests }
-    });
-}));
-
-// Get Pending Update Requests
-router.get('/profile/pending-requests', protect, catchAsync(async (req, res, next) => {
-    const pendingRequests = await UpdateRequest.find({
-        student: req.student._id,
-        status: 'pending'
-    });
-
-    res.status(200).json({
-        status: 'success',
-        data: { pendingRequests }
-    });
-}));
-
-// Update Password
-router.patch('/profile/update-password', protect, catchAsync(async (req, res, next) => {
-    const { currentPassword, newPassword } = req.body;
-    const student = await Student.findById(req.student._id).select('+password');
-
-    if (!(await student.comparePassword(currentPassword))) {
-        return next(new AppError('Your current password is wrong.', 401));
+        res.status(200).json({
+            success: true,
+            data: examCard
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Error generating examination card',
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+        });
     }
-
-    student.password = newPassword;
-    await student.save();
-
-    res.status(200).json({
-        status: 'success',
-        message: 'Password updated successfully'
-    });
-}));
+});
 
 module.exports = router; 

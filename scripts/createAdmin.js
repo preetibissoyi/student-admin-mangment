@@ -2,34 +2,42 @@ const mongoose = require('mongoose');
 const Admin = require('../models/Admin');
 require('dotenv').config();
 
-const createTestAdmin = async () => {
+const createAdmin = async () => {
     try {
-        console.log('Attempting to connect to MongoDB...');
-        console.log('MongoDB URI:', process.env.MONGO_URI ? 'Present' : 'Missing');
-        
-        await mongoose.connect(process.env.MONGO_URI);
+        // Connect to MongoDB
+        await mongoose.connect(process.env.MONGO_URI, {
+            useNewUrlParser: true,
+            useUnifiedTopology: true
+        });
         console.log('Connected to MongoDB');
 
-        const adminData = {
-            name: 'Test Admin',
-            email: 'admin@test.com',
-            password: 'password123',
-            role: 'admin'
-        };
-
-        const existingAdmin = await Admin.findOne({ email: adminData.email });
-        if (existingAdmin) {
+        // Check if admin exists
+        const adminExists = await Admin.findOne({ email: 'admin@example.com' });
+        
+        if (adminExists) {
             console.log('Admin already exists');
-            process.exit(0);
+            console.log('Email:', adminExists.email);
+            return;
         }
 
-        const admin = await Admin.create(adminData);
-        console.log('Test admin created successfully:', admin);
-        process.exit(0);
+        // Create admin
+        const admin = await Admin.create({
+            name: 'Admin User',
+            email: 'admin@example.com',
+            password: 'admin123',
+            role: 'admin'
+        });
+
+        console.log('Admin created successfully');
+        console.log('Email:', admin.email);
+        console.log('Password: admin123');
+
     } catch (error) {
-        console.error('Error creating test admin:', error);
-        process.exit(1);
+        console.error('Error:', error);
+    } finally {
+        await mongoose.connection.close();
+        console.log('MongoDB connection closed');
     }
 };
 
-createTestAdmin(); 
+createAdmin(); 

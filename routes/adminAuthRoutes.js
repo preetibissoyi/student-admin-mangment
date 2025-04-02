@@ -1,50 +1,59 @@
 const express = require('express');
 const Admin = require('../models/Admin');
 const jwt = require('jsonwebtoken');
-const catchAsync = require('../utils/catchAsync');
-const AppError = require('../utils/appError');
-
 const router = express.Router();
 
 // Admin Registration
-router.post('/register', catchAsync(async (req, res, next) => {
-    const { name, email, password } = req.body;
+router.post('/register', async (req, res) => {
+    try {
+        const { name, email, password } = req.body;
 
-    // Check if admin already exists
-    const existingAdmin = await Admin.findOne({ email });
-    if (existingAdmin) {
-        return next(new AppError('Email already registered', 400));
-    }
-
-    // Create new admin
-    const admin = await Admin.create({
-        name,
-        email,
-        password,
-        role: 'admin'
-    });
-
-    // Generate token
-    const token = jwt.sign({ id: admin._id }, process.env.JWT_SECRET || 'your-secret-key', {
-        expiresIn: '1d'
-    });
-
-    res.status(201).json({
-        status: 'success',
-        token,
-        data: {
-            admin: {
-                id: admin._id,
-                name: admin.name,
-                email: admin.email,
-                role: admin.role
-            }
+        // Check if admin already exists
+        const existingAdmin = await Admin.findOne({ email });
+        if (existingAdmin) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email already registered'
+            });
         }
-    });
-}));
+
+        // Create new admin
+        const admin = await Admin.create({
+            name,
+            email,
+            password,
+            role: 'admin'
+        });
+
+        // Generate token
+        const token = jwt.sign({ id: admin._id }, process.env.JWT_SECRET || 'your-secret-key', {
+            expiresIn: '1d'
+        });
+
+        res.status(201).json({
+            success: true,
+            token,
+            data: {
+                admin: {
+                    id: admin._id,
+                    name: admin.name,
+                    email: admin.email,
+                    role: admin.role
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Registration error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error in admin registration',
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+        });
+    }
+});
 
 // Admin Login
-router.post('/login', catchAsync(async (req, res, next) => {
+router.post('/login', async (req, res) => {
     try {
         console.log('Login attempt received:', { email: req.body.email });
         const { email, password } = req.body;
@@ -52,7 +61,10 @@ router.post('/login', catchAsync(async (req, res, next) => {
         // Check if email and password exist
         if (!email || !password) {
             console.log('Missing credentials');
-            return next(new AppError('Please provide email and password', 400));
+            return res.status(400).json({
+                success: false,
+                message: 'Please provide email and password'
+            });
         }
 
         // Check if admin exists && password is correct
@@ -61,16 +73,22 @@ router.post('/login', catchAsync(async (req, res, next) => {
 
         if (!admin) {
             console.log('Admin not found');
-            return next(new AppError('Invalid email or password', 401));
+            return res.status(401).json({
+                success: false,
+                message: 'Invalid email or password'
+            });
         }
 
         // Check password
-        const isPasswordCorrect = await admin.comparePassword(password);
+        const isPasswordCorrect = await admin.matchPassword(password);
         console.log('Password correct:', isPasswordCorrect);
 
         if (!isPasswordCorrect) {
             console.log('Invalid password');
-            return next(new AppError('Invalid email or password', 401));
+            return res.status(401).json({
+                success: false,
+                message: 'Invalid email or password'
+            });
         }
 
         // Generate token
@@ -82,7 +100,7 @@ router.post('/login', catchAsync(async (req, res, next) => {
 
         console.log('Login successful, sending response');
         res.status(200).json({
-            status: 'success',
+            success: true,
             token,
             data: {
                 admin: {
@@ -95,8 +113,12 @@ router.post('/login', catchAsync(async (req, res, next) => {
         });
     } catch (error) {
         console.error('Login error details:', error);
-        next(new AppError('An error occurred during login', 500));
+        res.status(500).json({
+            success: false,
+            message: 'Error in admin login',
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+        });
     }
-}));
+});
 
 module.exports = router; 
